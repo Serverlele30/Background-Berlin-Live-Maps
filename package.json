@@ -1,0 +1,27 @@
+{
+  "name": "berlin-live-transit",
+  "version": "1.0.0",
+  "description": "Live-Transit Dashboard als animierter Background für Berlin",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8000 -o",
+    "dev": "npx http-server -p 8000 -o -c-1"
+  },
+  "keywords": [
+    "berlin",
+    "transit",
+    "live",
+    "dashboard",
+    "vbb",
+    "public-transport",
+    "background",
+    "wallpaper"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Serverlele30/Background-Live-Maps-Berlin.git"
+  },
+  "homepage": "https://github.com/Serverlele30/Background-Live-Maps-Berlin#readme"
+}
