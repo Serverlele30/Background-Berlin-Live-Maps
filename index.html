@@ -333,6 +333,44 @@
         * {
             cursor: none !important;
         }
+
+        /* ===== Initial Loading Screen ===== */
+        #initialLoader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a0e27;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        #initialLoader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #00ffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .loader-text {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            font-weight: 500;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
     </style>
 
     <!-- External Resources -->
@@ -345,6 +383,25 @@
             defer></script>
 </head>
 <body>
+    <!-- Fallback for browsers without JavaScript -->
+    <noscript>
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0a0e27; display: flex; align-items: center; justify-content: center; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-align: center; padding: 20px;">
+            <div>
+                <h1 style="font-size: 32px; margin-bottom: 20px;">JavaScript erforderlich</h1>
+                <p style="font-size: 18px; color: rgba(255,255,255,0.7);">
+                    Diese Anwendung benötigt JavaScript, um zu funktionieren.<br>
+                    Bitte aktivieren Sie JavaScript in Ihren Browser-Einstellungen.
+                </p>
+            </div>
+        </div>
+    </noscript>
+
+    <!-- Initial Loading Screen -->
+    <div id="initialLoader">
+        <div class="loader-spinner" aria-hidden="true"></div>
+        <div class="loader-text">Berlin Live Transit wird geladen...</div>
+    </div>
+
     <!-- Main Application Container -->
     <main id="app" role="main">
         <!-- Interactive Map -->
@@ -371,37 +428,193 @@
         // ===== Application Initialization =====
         'use strict';
 
-        /**
-         * Initialize the Leaflet map with custom settings
-         * Disables zoom controls for cleaner interface
-         */
-        const map = L.map('map', {
-            zoomControl: false,
-            attributionControl: true,
-            zoomAnimation: true,
-            fadeAnimation: true,
-            markerZoomAnimation: true
-        });
-
-        // Add dark theme tile layer from CartoDB
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap © CartoDB'
-        }).addTo(map);
-
-        // Set initial view to Berlin center
-        const BERLIN_CENTER = [52.52, 13.405];
-        const DEFAULT_ZOOM = 14;
-        map.setView(BERLIN_CENTER, DEFAULT_ZOOM);
-
-        // ===== Application State =====
+        // ===== Global State =====
+        let map = null;
         const vehicleMarkers = {};
         let userLocationMarker = null;
         let isLoading = false;
         let userPosition = null;
-        let updateInterval = null;
+        let clockInterval = null;
+        let dataUpdateInterval = null;
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+        const RETRY_DELAY = 5000; // 5 seconds
+
+        /**
+         * Wait for Leaflet to be loaded
+         * @returns {Promise<void>}
+         */
+        function waitForLeaflet() {
+            return new Promise((resolve, reject) => {
+                if (typeof L !== 'undefined') {
+                    resolve();
+                    return;
+                }
+
+                let attempts = 0;
+                const maxAttempts = 50; // 5 seconds max wait
+                const interval = setInterval(() => {
+                    attempts++;
+                    if (typeof L !== 'undefined') {
+                        clearInterval(interval);
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(interval);
+                        reject(new Error('Leaflet konnte nicht geladen werden'));
+                    }
+                }, 100);
+            });
+        }
+
+        /**
+         * Initialize the application
+         */
+        async function initializeApp() {
+            try {
+                // Wait for DOM to be ready
+                if (document.readyState === 'loading') {
+                    await new Promise(resolve => {
+                        document.addEventListener('DOMContentLoaded', resolve);
+                    });
+                }
+
+                // Wait for Leaflet to be loaded
+                await waitForLeaflet();
+
+                // Initialize map
+                initializeMap();
+
+                // Start application
+                startApplication();
+
+                console.log('Berlin Live Transit erfolgreich gestartet');
+            } catch (error) {
+                console.error('Fehler beim Initialisieren der Anwendung:', error);
+                showErrorMessage('Anwendung konnte nicht gestartet werden. Bitte Seite neu laden.');
+            }
+        }
+
+        /**
+         * Initialize the Leaflet map
+         */
+        function initializeMap() {
+            const BERLIN_CENTER = [52.52, 13.405];
+            const DEFAULT_ZOOM = 14;
+
+            try {
+                // Initialize the Leaflet map with custom settings
+                map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: true,
+                    zoomAnimation: true,
+                    fadeAnimation: true,
+                    markerZoomAnimation: true
+                });
+
+                // Add dark theme tile layer from CartoDB
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap © CartoDB'
+                }).addTo(map);
+
+                // Set initial view to Berlin center
+                map.setView(BERLIN_CENTER, DEFAULT_ZOOM);
+
+                // Setup map event listeners
+                setupMapEvents();
+            } catch (error) {
+                console.error('Fehler beim Initialisieren der Karte:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Setup map event listeners
+         */
+        function setupMapEvents() {
+            let moveEndTimeout;
+            map.on('moveend', () => {
+                clearTimeout(moveEndTimeout);
+                moveEndTimeout = setTimeout(() => {
+                    loadRadarData();
+                }, 300);
+            });
+        }
+
+        /**
+         * Start the application
+         */
+        function startApplication() {
+            // Initialize clock display
+            updateClock();
+
+            // Get user location and load initial data
+            getUserLocation();
+
+            // Update clock every second
+            clockInterval = setInterval(updateClock, 1000);
+
+            // Refresh vehicle data every 15 seconds
+            dataUpdateInterval = setInterval(() => {
+                if (!isLoading) {
+                    loadRadarData();
+                }
+            }, 15000);
+
+            // Hide initial loader
+            setTimeout(() => {
+                const loader = document.getElementById('initialLoader');
+                if (loader) {
+                    loader.classList.add('hidden');
+                    // Remove from DOM after transition
+                    setTimeout(() => {
+                        loader.remove();
+                    }, 500);
+                }
+            }, 500);
+        }
+
+        /**
+         * Show error message to user
+         * @param {string} message - Error message to display
+         */
+        function showErrorMessage(message) {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) {
+                const loadingText = loadingIndicator.querySelector('.loading-text');
+                if (loadingText) {
+                    loadingText.textContent = message;
+                    loadingText.style.color = '#ff6b6b';
+                }
+                loadingIndicator.classList.add('show');
+
+                // Hide after 5 seconds
+                setTimeout(() => {
+                    loadingIndicator.classList.remove('show');
+                    if (loadingText) {
+                        loadingText.textContent = 'Lade Fahrzeuge...';
+                        loadingText.style.color = '';
+                    }
+                }, 5000);
+            }
+        }
 
         // ===== UI Helper Functions =====
+
+        /**
+         * Escape HTML to prevent XSS attacks
+         * @param {string} unsafe - Unsafe string
+         * @returns {string} Escaped string
+         */
+        function escapeHtml(unsafe) {
+            if (typeof unsafe !== 'string') return '';
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
         /**
          * Display the loading indicator
@@ -505,12 +718,15 @@
          */
         function createVehicleIcon(type, lineName) {
             const icon = getProductIcon(type);
+            const safeLineName = escapeHtml(lineName);
+            const safeType = escapeHtml(type);
+
             return L.divIcon({
                 className: 'custom-vehicle-icon',
                 html: `
                     <div class="vehicle-marker-container">
-                        <div class="vehicle-label">${lineName}</div>
-                        <div class="vehicle-marker vehicle-${type}">${icon}</div>
+                        <div class="vehicle-label">${safeLineName}</div>
+                        <div class="vehicle-marker vehicle-${safeType}">${icon}</div>
                     </div>
                 `,
                 iconSize: [32, 56],
@@ -539,15 +755,22 @@
         // ===== Data Loading Functions =====
 
         /**
-         * Load vehicle data from VBB Radar API
+         * Load vehicle data from VBB Radar API with retry logic
          * Fetches vehicles within current map bounds
          * Updates existing markers or creates new ones
+         * @param {number} attempt - Current retry attempt
          */
-        async function loadRadarData() {
+        async function loadRadarData(attempt = 0) {
             if (isLoading) return;
-            
+
+            // Check if map is initialized
+            if (!map) {
+                console.warn('Map nicht initialisiert');
+                return;
+            }
+
             showLoading();
-            
+
             try {
                 // Get current map bounds for API request
                 const bounds = map.getBounds();
@@ -579,6 +802,9 @@
                 if (!data || typeof data !== 'object') {
                     throw new Error('Invalid response data format');
                 }
+
+                // Reset retry count on success
+                retryCount = 0;
                 
                 // Track current vehicle IDs to remove stale markers
                 const currentVehicleIds = new Set();
@@ -615,78 +841,88 @@
                                 }
                             } else {
                                 // Create new marker for vehicle
-                                const marker = L.marker(newLatLng, {
-                                    icon: createVehicleIcon(type, lineName),
-                                    riseOnHover: true
-                                }).addTo(map);
+                                try {
+                                    const marker = L.marker(newLatLng, {
+                                        icon: createVehicleIcon(type, lineName),
+                                        riseOnHover: true
+                                    }).addTo(map);
 
-                                const direction = movement.direction || 'Unbekannt';
-                                const productName = getProductName(type);
+                                    const direction = escapeHtml(movement.direction || 'Unbekannt');
+                                    const productName = escapeHtml(getProductName(type));
+                                    const safeLineName = escapeHtml(lineName);
+                                    const safeIcon = escapeHtml(icon);
 
-                                // Build next stop information if available
-                                let nextStopInfo = '';
-                                if (movement.nextStopovers && Array.isArray(movement.nextStopovers) && movement.nextStopovers.length > 0) {
-                                    const nextStop = movement.nextStopovers[0];
-                                    if (nextStop.stop) {
-                                        const arrivalTime = nextStop.arrival ? 
-                                            new Date(nextStop.arrival).toLocaleTimeString('de-DE', { 
-                                                hour: '2-digit', 
-                                                minute: '2-digit',
-                                                seconds: '2-digit' 
-                                            }) : '—';
-                                        nextStopInfo = `
-                                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
-                                                <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">
-                                                    NÄCHSTER HALT
+                                    // Build next stop information if available
+                                    let nextStopInfo = '';
+                                    if (movement.nextStopovers && Array.isArray(movement.nextStopovers) && movement.nextStopovers.length > 0) {
+                                        const nextStop = movement.nextStopovers[0];
+                                        if (nextStop.stop && nextStop.stop.name) {
+                                            const arrivalTime = nextStop.arrival ?
+                                                new Date(nextStop.arrival).toLocaleTimeString('de-DE', {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    second: '2-digit'
+                                                }) : '—';
+                                            const safeStopName = escapeHtml(nextStop.stop.name);
+                                            const safeArrivalTime = escapeHtml(arrivalTime);
+
+                                            nextStopInfo = `
+                                                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);">
+                                                    <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-bottom: 4px;">
+                                                        NÄCHSTER HALT
+                                                    </div>
+                                                    <div style="font-size: 13px; font-weight: 500;">
+                                                        ${safeStopName}
+                                                    </div>
+                                                    <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px;">
+                                                        Ankunft: ${safeArrivalTime}
+                                                    </div>
                                                 </div>
-                                                <div style="font-size: 13px; font-weight: 500;">
-                                                    ${nextStop.stop.name}
-                                                </div>
-                                                <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px;">
-                                                    Ankunft: ${arrivalTime}
-                                                </div>
-                                            </div>
-                                        `;
+                                            `;
+                                        }
                                     }
+
+                                    const popupContent = `
+                                        <div style="text-align: center; min-width: 200px;">
+                                            <div style="
+                                                width: 60px;
+                                                height: 60px;
+                                                margin: 0 auto 15px;
+                                                background: ${getProductColor(type)};
+                                                border-radius: 12px;
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                font-size: 32px;
+                                                font-weight: 700;
+                                                color: white;
+                                                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                                            ">${safeIcon}</div>
+                                            <div style="font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+                                                ${productName}
+                                            </div>
+                                            <div style="font-weight: 700; font-size: 22px; margin-bottom: 8px; color: ${getProductColor(type)};">
+                                                ${safeLineName}
+                                            </div>
+                                            <div style="font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.4;">
+                                                → ${direction}
+                                            </div>
+                                            ${nextStopInfo}
+                                        </div>
+                                    `;
+                                    marker.bindPopup(popupContent, {
+                                        maxWidth: 300,
+                                        className: 'custom-popup'
+                                    });
+
+                                    vehicleMarkers[vehicleId] = {
+                                        marker: marker,
+                                        type: type
+                                    };
+                                } catch (markerError) {
+                                    console.error('Fehler beim Erstellen des Markers:', markerError, movement);
+                                    // Continue with next vehicle instead of crashing
                                 }
-                                
-                                const popupContent = `
-                                    <div style="text-align: center; min-width: 200px;">
-                                        <div style="
-                                            width: 60px;
-                                            height: 60px;
-                                            margin: 0 auto 15px;
-                                            background: ${getProductColor(type)};
-                                            border-radius: 12px;
-                                            display: flex;
-                                            align-items: center;
-                                            justify-content: center;
-                                            font-size: 32px;
-                                            font-weight: 700;
-                                            color: white;
-                                            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-                                        ">${icon}</div>
-                                        <div style="font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
-                                            ${productName}
-                                        </div>
-                                        <div style="font-weight: 700; font-size: 22px; margin-bottom: 8px; color: ${getProductColor(type)};">
-                                            ${lineName}
-                                        </div>
-                                        <div style="font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.4;">
-                                            → ${direction}
-                                        </div>
-                                        ${nextStopInfo}
-                                    </div>
-                                `;
-                                marker.bindPopup(popupContent, {
-                                    maxWidth: 300,
-                                    className: 'custom-popup'
-                                });
-                                
-                                vehicleMarkers[vehicleId] = {
-                                    marker: marker,
-                                    type: type
-                                };
                             }
                         }
                     });
@@ -704,16 +940,39 @@
 
             } catch (error) {
                 // Handle different error types
+                let errorMessage = '';
+                let shouldRetry = false;
+
                 if (error.name === 'AbortError') {
                     console.warn('Request timeout - Fahrzeugdaten konnten nicht geladen werden');
+                    errorMessage = 'Zeitüberschreitung - versuche erneut...';
+                    shouldRetry = true;
                 } else if (error instanceof TypeError && error.message.includes('fetch')) {
                     console.error('Netzwerkfehler - Bitte Internetverbindung prüfen:', error);
+                    errorMessage = 'Netzwerkfehler - bitte Verbindung prüfen';
+                    shouldRetry = true;
                 } else {
                     console.error('Fehler beim Laden der Fahrzeugdaten:', error);
+                    errorMessage = 'Fehler beim Laden der Daten';
+                    shouldRetry = true;
                 }
 
-                // Show user-friendly error in UI (optional)
-                // You could add an error notification here
+                // Retry logic
+                if (shouldRetry && attempt < MAX_RETRIES) {
+                    retryCount++;
+                    console.log(`Wiederhole Anfrage (${retryCount}/${MAX_RETRIES}) in ${RETRY_DELAY/1000}s...`);
+                    showErrorMessage(`${errorMessage} (Versuch ${retryCount}/${MAX_RETRIES})`);
+
+                    setTimeout(() => {
+                        loadRadarData(attempt + 1);
+                    }, RETRY_DELAY);
+                } else if (attempt >= MAX_RETRIES) {
+                    // Max retries reached
+                    retryCount = 0;
+                    showErrorMessage('Fehler: Maximale Anzahl Wiederholungen erreicht');
+                } else {
+                    showErrorMessage(errorMessage);
+                }
             } finally {
                 hideLoading();
             }
@@ -806,7 +1065,19 @@
                     },
                     // Error callback
                     (error) => {
-                        console.warn('Standort nicht verfügbar:', error.message);
+                        let errorMsg = 'Standort nicht verfügbar';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMsg = 'Standortzugriff verweigert';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMsg = 'Standort nicht verfügbar';
+                                break;
+                            case error.TIMEOUT:
+                                errorMsg = 'Standortabfrage Timeout';
+                                break;
+                        }
+                        console.warn(errorMsg + ':', error.message);
                         // Load data with default Berlin view
                         loadRadarData();
                     },
@@ -856,40 +1127,57 @@
             }
         }
 
-        // ===== Event Listeners =====
+        // ===== Cleanup Functions =====
 
         /**
-         * Debounced map movement handler
-         * Reloads vehicle data when map stops moving
+         * Clean up intervals and event listeners
+         * Called when page is unloaded
          */
-        let moveEndTimeout;
-        map.on('moveend', () => {
-            clearTimeout(moveEndTimeout);
-            moveEndTimeout = setTimeout(() => {
-                loadRadarData();
-            }, 300);
-        });
+        function cleanup() {
+            if (clockInterval) {
+                clearInterval(clockInterval);
+                clockInterval = null;
+            }
+            if (dataUpdateInterval) {
+                clearInterval(dataUpdateInterval);
+                dataUpdateInterval = null;
+            }
+            console.log('Cleanup abgeschlossen');
+        }
 
         // ===== Application Startup =====
 
-        // Initialize clock display
-        updateClock();
+        // Initialize the application
+        initializeApp();
 
-        // Get user location and load initial data
-        getUserLocation();
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', cleanup);
 
-        // Update clock every second
-        setInterval(updateClock, 1000);
-
-        // Refresh vehicle data every 15 seconds
-        setInterval(() => {
-            if (!isLoading) {
-                loadRadarData();
+        // Handle visibility change to pause/resume updates
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Page is hidden - pause updates
+                if (dataUpdateInterval) {
+                    clearInterval(dataUpdateInterval);
+                    dataUpdateInterval = null;
+                }
+                console.log('Updates pausiert (Tab versteckt)');
+            } else {
+                // Page is visible - resume updates
+                if (!dataUpdateInterval) {
+                    dataUpdateInterval = setInterval(() => {
+                        if (!isLoading) {
+                            loadRadarData();
+                        }
+                    }, 15000);
+                }
+                // Load data immediately when tab becomes visible
+                if (!isLoading && map) {
+                    loadRadarData();
+                }
+                console.log('Updates fortgesetzt (Tab sichtbar)');
             }
-        }, 15000);
-
-        // Log application start
-        console.log('Berlin Live Transit gestartet');
+        });
     </script>
 </body>
 </html>
