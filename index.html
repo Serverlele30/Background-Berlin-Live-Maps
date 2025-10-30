@@ -3,8 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Berlin Live Transit</title>
+
+    <!-- Primary Meta Tags -->
+    <title>Berlin Live Transit - Echtzeit-Nahverkehrskarte</title>
+    <meta name="title" content="Berlin Live Transit - Echtzeit-Nahverkehrskarte">
+    <meta name="description" content="Verfolgen Sie den Berliner Nahverkehr in Echtzeit. U-Bahn, S-Bahn, Trams, Busse und Fähren live auf der Karte.">
+    <meta name="keywords" content="Berlin, Transit, Nahverkehr, Live, Karte, U-Bahn, S-Bahn, Tram, Bus, BVG, VBB">
+    <meta name="author" content="Berlin Live Transit">
+    <meta name="theme-color" content="#0a0e27">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://example.com/">
+    <meta property="og:title" content="Berlin Live Transit - Echtzeit-Nahverkehrskarte">
+    <meta property="og:description" content="Verfolgen Sie den Berliner Nahverkehr in Echtzeit. U-Bahn, S-Bahn, Trams, Busse und Fähren live auf der Karte.">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://example.com/">
+    <meta property="twitter:title" content="Berlin Live Transit - Echtzeit-Nahverkehrskarte">
+    <meta property="twitter:description" content="Verfolgen Sie den Berliner Nahverkehr in Echtzeit. U-Bahn, S-Bahn, Trams, Busse und Fähren live auf der Karte.">
+
+    <!-- Preconnect to external resources for better performance -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://v6.vbb.transport.rest" crossorigin>
+    <link rel="dns-prefetch" href="https://basemaps.cartocdn.com">
     <style>
+        /* ===== Base Styles ===== */
         * {
             margin: 0;
             padding: 0;
@@ -20,6 +45,7 @@
             cursor: none;
         }
 
+        /* ===== Map Container ===== */
         #map {
             position: absolute;
             top: 0;
@@ -31,6 +57,7 @@
             cursor: none !important;
         }
 
+        /* ===== Clock Display ===== */
         .clock-container {
             position: absolute;
             bottom: 40px;
@@ -73,6 +100,7 @@
             text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
         }
 
+        /* ===== Loading Indicator ===== */
         .loading-indicator {
             position: absolute;
             bottom: 40px;
@@ -115,6 +143,7 @@
             font-weight: 500;
         }
 
+        /* ===== Vehicle Markers ===== */
         .vehicle-marker-container {
             position: relative;
             width: 32px;
@@ -191,6 +220,7 @@
             pointer-events: none;
         }
 
+        /* ===== Vehicle Type Colors ===== */
         .vehicle-subway { 
             background: #0066cc;
             color: #0066cc;
@@ -216,6 +246,7 @@
             color: #cc6600;
         }
 
+        /* ===== User Location Marker ===== */
         .user-location-marker {
             position: relative;
             width: 40px;
@@ -262,6 +293,7 @@
             }
         }
 
+        /* ===== Leaflet Popup Customization ===== */
         .leaflet-popup-content-wrapper {
             background: rgba(20, 20, 30, 0.98);
             backdrop-filter: blur(15px);
@@ -280,44 +312,69 @@
             background: rgba(20, 20, 30, 0.98);
         }
 
+        /* ===== Responsive Design ===== */
         @media (max-width: 768px) {
             .clock-container {
                 padding: 25px 30px;
                 bottom: 20px;
                 right: 20px;
             }
-            
+
             .time {
                 font-size: 56px;
             }
-            
+
             .date {
                 font-size: 14px;
             }
         }
 
-        /* Verstecke Cursor überall */
+        /* ===== Cursor Styles ===== */
         * {
             cursor: none !important;
         }
     </style>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- External Resources -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""
+            defer></script>
 </head>
 <body>
-    <div id="map"></div>
-    
-    <div class="clock-container">
-        <div class="time" id="time"></div>
-        <div class="date" id="date"></div>
-    </div>
+    <!-- Main Application Container -->
+    <main id="app" role="main">
+        <!-- Interactive Map -->
+        <div id="map" role="application" aria-label="Berlin Transit Live Map"></div>
 
-    <div class="loading-indicator" id="loadingIndicator">
-        <div class="spinner"></div>
-        <span class="loading-text">Lade Fahrzeuge...</span>
-    </div>
+        <!-- Clock Display -->
+        <aside class="clock-container" role="complementary" aria-label="Aktuelle Uhrzeit und Datum">
+            <time class="time" id="time" aria-live="polite" aria-atomic="true"></time>
+            <div class="date" id="date" aria-live="polite" aria-atomic="true"></div>
+        </aside>
+
+        <!-- Loading Indicator -->
+        <div class="loading-indicator"
+             id="loadingIndicator"
+             role="status"
+             aria-live="polite"
+             aria-label="Ladezustand">
+            <div class="spinner" aria-hidden="true"></div>
+            <span class="loading-text">Lade Fahrzeuge...</span>
+        </div>
+    </main>
 
     <script>
+        // ===== Application Initialization =====
+        'use strict';
+
+        /**
+         * Initialize the Leaflet map with custom settings
+         * Disables zoom controls for cleaner interface
+         */
         const map = L.map('map', {
             zoomControl: false,
             attributionControl: true,
@@ -326,29 +383,55 @@
             markerZoomAnimation: true
         });
 
+        // Add dark theme tile layer from CartoDB
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap © CartoDB'
         }).addTo(map);
 
-        const berlinCenter = [52.52, 13.405];
-        map.setView(berlinCenter, 14);
+        // Set initial view to Berlin center
+        const BERLIN_CENTER = [52.52, 13.405];
+        const DEFAULT_ZOOM = 14;
+        map.setView(BERLIN_CENTER, DEFAULT_ZOOM);
 
+        // ===== Application State =====
         const vehicleMarkers = {};
         let userLocationMarker = null;
         let isLoading = false;
         let userPosition = null;
+        let updateInterval = null;
 
+        // ===== UI Helper Functions =====
+
+        /**
+         * Display the loading indicator
+         */
         function showLoading() {
-            document.getElementById('loadingIndicator').classList.add('show');
-            isLoading = true;
+            const indicator = document.getElementById('loadingIndicator');
+            if (indicator) {
+                indicator.classList.add('show');
+                isLoading = true;
+            }
         }
 
+        /**
+         * Hide the loading indicator
+         */
         function hideLoading() {
-            document.getElementById('loadingIndicator').classList.remove('show');
-            isLoading = false;
+            const indicator = document.getElementById('loadingIndicator');
+            if (indicator) {
+                indicator.classList.remove('show');
+                isLoading = false;
+            }
         }
 
+        // ===== Transit Product Type Helpers =====
+
+        /**
+         * Determine the vehicle type from product string
+         * @param {string} product - Product type from API
+         * @returns {string} Normalized product type
+         */
         function getProductType(product) {
             if (!product) return 'bus';
             const p = product.toLowerCase();
@@ -361,6 +444,11 @@
             return 'bus';
         }
 
+        /**
+         * Get color associated with vehicle type
+         * @param {string} type - Vehicle type
+         * @returns {string} Hex color code
+         */
         function getProductColor(type) {
             const colors = {
                 subway: '#0066cc',
@@ -373,6 +461,11 @@
             return colors[type] || '#cc44cc';
         }
 
+        /**
+         * Get icon letter for vehicle type
+         * @param {string} type - Vehicle type
+         * @returns {string} Single letter icon
+         */
         function getProductIcon(type) {
             const icons = {
                 subway: 'U',
@@ -385,6 +478,11 @@
             return icons[type] || 'B';
         }
 
+        /**
+         * Get German name for vehicle type
+         * @param {string} type - Vehicle type
+         * @returns {string} Localized name
+         */
         function getProductName(type) {
             const names = {
                 subway: 'U-Bahn',
@@ -397,6 +495,14 @@
             return names[type] || 'Bus';
         }
 
+        // ===== Marker Creation Functions =====
+
+        /**
+         * Create custom icon for vehicle markers
+         * @param {string} type - Vehicle type
+         * @param {string} lineName - Line name to display
+         * @returns {L.DivIcon} Leaflet div icon
+         */
         function createVehicleIcon(type, lineName) {
             const icon = getProductIcon(type);
             return L.divIcon({
@@ -412,6 +518,10 @@
             });
         }
 
+        /**
+         * Create custom icon for user location marker
+         * @returns {L.DivIcon} Leaflet div icon with pulse effect
+         */
         function createUserLocationIcon() {
             return L.divIcon({
                 className: 'user-location-icon',
@@ -426,59 +536,96 @@
             });
         }
 
+        // ===== Data Loading Functions =====
+
+        /**
+         * Load vehicle data from VBB Radar API
+         * Fetches vehicles within current map bounds
+         * Updates existing markers or creates new ones
+         */
         async function loadRadarData() {
             if (isLoading) return;
             
             showLoading();
             
             try {
+                // Get current map bounds for API request
                 const bounds = map.getBounds();
-                const north = bounds.getNorth();
-                const south = bounds.getSouth();
-                const west = bounds.getWest();
-                const east = bounds.getEast();
-                
+                const north = bounds.getNorth().toFixed(6);
+                const south = bounds.getSouth().toFixed(6);
+                const west = bounds.getWest().toFixed(6);
+                const east = bounds.getEast().toFixed(6);
+
+                // Build API URL with bounds
                 const radarUrl = `https://v6.vbb.transport.rest/radar?north=${north}&south=${south}&west=${west}&east=${east}&results=150`;
-                
-                const response = await fetch(radarUrl);
+
+                // Fetch vehicle data with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+                const response = await fetch(radarUrl, {
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Validate response data
+                if (!data || typeof data !== 'object') {
+                    throw new Error('Invalid response data format');
                 }
                 
-                const data = await response.json();
-                
+                // Track current vehicle IDs to remove stale markers
                 const currentVehicleIds = new Set();
-                
-                if (data.movements) {
+
+                // Process vehicle movements from API
+                if (data.movements && Array.isArray(data.movements)) {
                     data.movements.forEach(movement => {
+                        // Validate movement data
+                        if (!movement || !movement.location || !movement.line) {
+                            return; // Skip invalid movement
+                        }
+
                         if (movement.location && movement.line) {
                             const type = getProductType(movement.line.product);
                             const lineName = movement.line.name || '?';
                             const icon = getProductIcon(type);
-                            
+
+                            // Create unique vehicle ID
                             const vehicleId = movement.tripId || `${lineName}-${movement.direction || 'unknown'}`;
                             currentVehicleIds.add(vehicleId);
-                            
+
+                            // Create new position
                             const newLatLng = L.latLng(movement.location.latitude, movement.location.longitude);
-                            
+
+                            // Update existing marker or create new one
                             if (vehicleMarkers[vehicleId]) {
+                                // Vehicle exists - update position with animation
                                 const marker = vehicleMarkers[vehicleId].marker;
                                 const oldLatLng = marker.getLatLng();
-                                
+
+                                // Only animate if position changed
                                 if (oldLatLng.lat !== newLatLng.lat || oldLatLng.lng !== newLatLng.lng) {
                                     animateMarker(marker, oldLatLng, newLatLng, 3000);
                                 }
                             } else {
-                                const marker = L.marker(newLatLng, { 
+                                // Create new marker for vehicle
+                                const marker = L.marker(newLatLng, {
                                     icon: createVehicleIcon(type, lineName),
                                     riseOnHover: true
                                 }).addTo(map);
-                                
+
                                 const direction = movement.direction || 'Unbekannt';
                                 const productName = getProductName(type);
-                                
+
+                                // Build next stop information if available
                                 let nextStopInfo = '';
-                                if (movement.nextStopovers && movement.nextStopovers.length > 0) {
+                                if (movement.nextStopovers && Array.isArray(movement.nextStopovers) && movement.nextStopovers.length > 0) {
                                     const nextStop = movement.nextStopovers[0];
                                     if (nextStop.stop) {
                                         const arrivalTime = nextStop.arrival ? 
@@ -545,70 +692,103 @@
                     });
                 }
                 
+                // Remove vehicles that are no longer in the response
                 Object.keys(vehicleMarkers).forEach(vehicleId => {
                     if (!currentVehicleIds.has(vehicleId)) {
                         map.removeLayer(vehicleMarkers[vehicleId].marker);
                         delete vehicleMarkers[vehicleId];
                     }
                 });
-                
+
                 console.log(`${Object.keys(vehicleMarkers).length} Fahrzeuge aktiv`);
-                
+
             } catch (error) {
-                console.error('Fehler beim Laden:', error);
+                // Handle different error types
+                if (error.name === 'AbortError') {
+                    console.warn('Request timeout - Fahrzeugdaten konnten nicht geladen werden');
+                } else if (error instanceof TypeError && error.message.includes('fetch')) {
+                    console.error('Netzwerkfehler - Bitte Internetverbindung prüfen:', error);
+                } else {
+                    console.error('Fehler beim Laden der Fahrzeugdaten:', error);
+                }
+
+                // Show user-friendly error in UI (optional)
+                // You could add an error notification here
             } finally {
                 hideLoading();
             }
         }
 
+        // ===== Animation Functions =====
+
+        /**
+         * Smoothly animate marker from one position to another
+         * @param {L.Marker} marker - Leaflet marker to animate
+         * @param {L.LatLng} startLatLng - Starting position
+         * @param {L.LatLng} endLatLng - Ending position
+         * @param {number} duration - Animation duration in milliseconds
+         */
         function animateMarker(marker, startLatLng, endLatLng, duration) {
             const startTime = Date.now();
             const latDiff = endLatLng.lat - startLatLng.lat;
             const lngDiff = endLatLng.lng - startLatLng.lng;
-            
+
             function updatePosition() {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                
-                const easeProgress = progress < 0.5 
-                    ? 2 * progress * progress 
+
+                // Ease in-out cubic interpolation for smooth movement
+                const easeProgress = progress < 0.5
+                    ? 2 * progress * progress
                     : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-                
+
                 const currentLat = startLatLng.lat + (latDiff * easeProgress);
                 const currentLng = startLatLng.lng + (lngDiff * easeProgress);
-                
+
                 marker.setLatLng([currentLat, currentLng]);
-                
+
+                // Continue animation until complete
                 if (progress < 1) {
                     requestAnimationFrame(updatePosition);
                 }
             }
-            
+
             updatePosition();
         }
 
+        // ===== Geolocation Functions =====
+
+        /**
+         * Get user's current location and center map on it
+         * Falls back to Berlin center if geolocation is unavailable
+         */
         function getUserLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
+                    // Success callback
                     (position) => {
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
                         userPosition = [lat, lon];
-                        
+
+                        // Center map on user location
                         map.setView([lat, lon], 16, {
                             animate: true,
                             duration: 1
                         });
-                        
+
+                        // Remove old location marker if exists
                         if (userLocationMarker) {
                             map.removeLayer(userLocationMarker);
                         }
-                        
+
+                        // Create new location marker
                         userLocationMarker = L.marker([lat, lon], {
                             icon: createUserLocationIcon(),
                             zIndexOffset: 1000
                         }).addTo(map);
-                        
+
+                        // Add popup with coordinates
                         userLocationMarker.bindPopup(`
                             <div style="text-align: center;">
                                 <div style="font-size: 32px; margin-bottom: 10px;">📍</div>
@@ -620,14 +800,17 @@
                                 </div>
                             </div>
                         `);
-                        
+
                         console.log('Standort gefunden:', lat, lon);
                         loadRadarData();
                     },
+                    // Error callback
                     (error) => {
-                        console.log('Standort nicht verfügbar:', error);
+                        console.warn('Standort nicht verfügbar:', error.message);
+                        // Load data with default Berlin view
                         loadRadarData();
                     },
+                    // Options
                     {
                         enableHighAccuracy: true,
                         timeout: 5000,
@@ -635,30 +818,50 @@
                     }
                 );
             } else {
-                console.log('Geolocation nicht unterstützt');
+                console.warn('Geolocation wird von diesem Browser nicht unterstützt');
                 loadRadarData();
             }
         }
 
+        // ===== Clock Functions =====
+
+        /**
+         * Update clock display with current time and date
+         * Formats time as HH:MM:SS and date in German format
+         */
         function updateClock() {
             const now = new Date();
-            
+
+            // Format time as HH:MM:SS
             const hours = String(now.getHours()).padStart(2, '0');
             const minutes = String(now.getMinutes()).padStart(2, '0');
             const seconds = String(now.getSeconds()).padStart(2, '0');
-            
-            document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
-            
-            const options = { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+
+            const timeElement = document.getElementById('time');
+            if (timeElement) {
+                timeElement.textContent = `${hours}:${minutes}:${seconds}`;
+            }
+
+            // Format date in German locale
+            const options = {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
             };
             const dateStr = now.toLocaleDateString('de-DE', options);
-            document.getElementById('date').textContent = dateStr;
+            const dateElement = document.getElementById('date');
+            if (dateElement) {
+                dateElement.textContent = dateStr;
+            }
         }
 
+        // ===== Event Listeners =====
+
+        /**
+         * Debounced map movement handler
+         * Reloads vehicle data when map stops moving
+         */
         let moveEndTimeout;
         map.on('moveend', () => {
             clearTimeout(moveEndTimeout);
@@ -667,15 +870,26 @@
             }, 300);
         });
 
+        // ===== Application Startup =====
+
+        // Initialize clock display
         updateClock();
+
+        // Get user location and load initial data
         getUserLocation();
-        
+
+        // Update clock every second
         setInterval(updateClock, 1000);
+
+        // Refresh vehicle data every 15 seconds
         setInterval(() => {
             if (!isLoading) {
                 loadRadarData();
             }
         }, 15000);
+
+        // Log application start
+        console.log('Berlin Live Transit gestartet');
     </script>
 </body>
 </html>
