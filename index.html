@@ -1030,10 +1030,9 @@
                         const lon = position.coords.longitude;
                         userPosition = [lat, lon];
 
-                        // Center map on user location
+                        // Center map on user location immediately (no animation)
                         map.setView([lat, lon], 16, {
-                            animate: true,
-                            duration: 1
+                            animate: false
                         });
 
                         // Remove old location marker if exists
